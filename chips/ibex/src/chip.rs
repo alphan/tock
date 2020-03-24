@@ -16,7 +16,8 @@ use crate::plic;
 use crate::timer;
 use crate::uart;
 
-pub const CHIP_FREQ: u32 = 50_000_000;
+//pub const CHIP_FREQ: u32 = 50_000_000; // For FGPA
+pub const CHIP_FREQ: u32 = 500_000; // For Verilator
 
 pub struct Ibex {
     userspace_kernel_boundary: SysCall,
