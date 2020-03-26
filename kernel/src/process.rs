@@ -1311,19 +1311,19 @@ impl<C: Chip> ProcessType for Process<'a, C> {
         self.stored_state.set(stored_state);
 
         // Update debug state as needed after running this process.
-        self.debug.map(|debug| {
-            // Update max stack depth if needed.
-            if self.current_stack_pointer.get() < debug.min_stack_pointer {
-                debug.min_stack_pointer = self.current_stack_pointer.get();
-            }
+        //  self.debug.map(|debug| {
+        //      // Update max stack depth if needed.
+        //      if self.current_stack_pointer.get() < debug.min_stack_pointer {
+        //          debug.min_stack_pointer = self.current_stack_pointer.get();
+        //      }
 
-            // More debugging help. If this occurred because of a timeslice
-            // expiration, mark that so we can check later if a process is
-            // exceeding its timeslices too often.
-            if switch_reason == syscall::ContextSwitchReason::TimesliceExpired {
-                debug.timeslice_expiration_count += 1;
-            }
-        });
+        //      // More debugging help. If this occurred because of a timeslice
+        //      // expiration, mark that so we can check later if a process is
+        //      // exceeding its timeslices too often.
+        //      if switch_reason == syscall::ContextSwitchReason::TimesliceExpired {
+        //          debug.timeslice_expiration_count += 1;
+        //      }
+        //  });
 
         Some(switch_reason)
     }

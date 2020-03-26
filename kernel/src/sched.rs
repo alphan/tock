@@ -375,7 +375,7 @@ impl Kernel {
                             process.set_fault_state();
                         }
                         Some(ContextSwitchReason::SyscallFired { syscall }) => {
-                            process.debug_syscall_called(syscall);
+                            //process.debug_syscall_called(syscall);
 
                             // Enforce platform-specific syscall filtering here.
                             //
