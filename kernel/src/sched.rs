@@ -47,6 +47,9 @@ pub struct Kernel {
     /// created and the data structures for grants have already been
     /// established.
     grants_finalized: Cell<bool>,
+
+    /// Identifier of the last running process. Used to configure MPU more efficiently.
+    last_running_process: Cell<Option<usize>>,
 }
 
 impl Kernel {
@@ -57,6 +60,7 @@ impl Kernel {
             process_identifier_max: Cell::new(0),
             grant_counter: Cell::new(0),
             grants_finalized: Cell::new(false),
+            last_running_process: Cell::new(None),
         }
     }
 
@@ -331,6 +335,7 @@ impl Kernel {
         systick.reset();
         systick.set_timer(KERNEL_TICK_DURATION_US);
         systick.enable(false);
+        let identifier: usize = process.appid().id();
 
         loop {
             if chip.has_pending_interrupts()
@@ -349,12 +354,18 @@ impl Kernel {
                     // Running means that this process expects to be running,
                     // so go ahead and set things up and switch to executing
                     // the process.
-                    process.setup_mpu();
-                    chip.mpu().enable_mpu();
+
+                    if Some(identifier) != self.last_running_process.get() {
+                        // TODO: Why do we have to call `disable_mpu()`? Why is calling
+                        // `enable_mpu()` not enough?
+                        //chip.mpu().disable_mpu();
+                        process.setup_mpu();
+                        chip.mpu().enable_mpu();
+                        self.last_running_process.set(Some(identifier));
+                    }
                     systick.enable(true);
                     let context_switch_reason = process.switch_to();
                     systick.enable(false);
-                    chip.mpu().disable_mpu();
 
                     // Now the process has returned back to the kernel. Check
                     // why and handle the process as appropriate.
