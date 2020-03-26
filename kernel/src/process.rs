@@ -1302,7 +1302,7 @@ impl<C: Chip> ProcessType for Process<'a, C> {
             return None;
         }
 
-        let mut stored_state = self.stored_state.get();
+        let mut stored_state = self.stored_state.take();
         let (stack_pointer, switch_reason) = self
             .chip
             .userspace_kernel_boundary()
