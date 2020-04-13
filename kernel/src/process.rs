@@ -1,6 +1,6 @@
 //! Support for creating and running userspace applications.
 
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use core::convert::TryInto;
 use core::fmt;
 use core::fmt::Write;
@@ -736,7 +736,7 @@ pub struct Process<'a, C: 'static + Chip> {
     /// State saved on behalf of the process each time the app switches to the
     /// kernel.
     stored_state:
-        Cell<<<C as Chip>::UserspaceKernelBoundary as UserspaceKernelBoundary>::StoredState>,
+        RefCell<<<C as Chip>::UserspaceKernelBoundary as UserspaceKernelBoundary>::StoredState>,
 
     /// The current state of the app. The scheduler uses this to determine
     /// whether it can schedule this app to execute.
@@ -916,19 +916,17 @@ impl<C: Chip> ProcessType for Process<'a, C> {
 
                 // Handle any architecture-specific requirements for a process
                 // when it first starts (as it would when it is new).
-                let mut stored_state = self.stored_state.get();
                 let new_stack_pointer_res = unsafe {
                     self.chip.userspace_kernel_boundary().initialize_process(
                         self.sp(),
                         self.sp() as usize - self.memory.as_ptr() as usize,
-                        &mut stored_state,
+                        &mut self.stored_state.borrow_mut(),
                     )
                 };
                 match new_stack_pointer_res {
                     Ok(new_stack_pointer) => {
                         self.current_stack_pointer.set(new_stack_pointer as *mut u8);
                         self.debug_set_max_stack_depth();
-                        self.stored_state.set(stored_state);
                     }
                     Err(_) => {
                         // We couldn't initialize the architecture-specific
@@ -1232,11 +1230,9 @@ impl<C: Chip> ProcessType for Process<'a, C> {
     }
 
     unsafe fn set_syscall_return_value(&self, return_value: isize) {
-        let mut stored_state = self.stored_state.get();
         self.chip
             .userspace_kernel_boundary()
-            .set_syscall_return_value(self.sp(), &mut stored_state, return_value);
-        self.stored_state.set(stored_state);
+            .set_syscall_return_value(self.sp(), &mut self.stored_state.borrow_mut(), return_value);
     }
 
     unsafe fn set_process_function(&self, callback: FunctionCall) {
@@ -1249,12 +1245,10 @@ impl<C: Chip> ProcessType for Process<'a, C> {
         // stack. Architecture-specific code handles actually doing the push
         // since we don't know the details of exactly what the stack frames look
         // like.
-        let mut stored_state = self.stored_state.get();
-
         match self.chip.userspace_kernel_boundary().set_process_function(
             self.sp(),
             remaining_stack_bytes,
-            &mut stored_state,
+            &mut self.stored_state.borrow_mut(),
             callback,
         ) {
             Ok(stack_bottom) => {
@@ -1293,7 +1287,6 @@ impl<C: Chip> ProcessType for Process<'a, C> {
                 self.set_fault_state();
             }
         }
-        self.stored_state.set(stored_state);
     }
 
     unsafe fn switch_to(&self) -> Option<syscall::ContextSwitchReason> {
@@ -1302,13 +1295,11 @@ impl<C: Chip> ProcessType for Process<'a, C> {
             return None;
         }
 
-        let mut stored_state = self.stored_state.take();
         let (stack_pointer, switch_reason) = self
             .chip
             .userspace_kernel_boundary()
-            .switch_to_process(self.sp(), &mut stored_state);
+            .switch_to_process(self.sp(), &mut self.stored_state.borrow_mut());
         self.current_stack_pointer.set(stack_pointer as *const u8);
-        self.stored_state.set(stored_state);
 
         // Update debug state as needed after running this process.
         //  self.debug.map(|debug| {
@@ -1517,7 +1508,7 @@ impl<C: Chip> ProcessType for Process<'a, C> {
 
         self.chip.userspace_kernel_boundary().print_context(
             self.sp(),
-            &self.stored_state.get(),
+            &self.stored_state.borrow(),
             writer,
         );
 
@@ -1752,7 +1743,7 @@ impl<C: 'static + Chip> Process<'a, C> {
 
         process.flash = app_flash;
 
-        process.stored_state = Cell::new(Default::default());
+        process.stored_state = RefCell::new(Default::default());
         process.state = Cell::new(State::Unstarted);
         process.fault_response = fault_response;
         process.restart_count = Cell::new(0);
@@ -1794,18 +1785,16 @@ impl<C: 'static + Chip> Process<'a, C> {
         });
 
         // Handle any architecture-specific requirements for a new process
-        let mut stored_state = process.stored_state.get();
         match chip.userspace_kernel_boundary().initialize_process(
             process.sp(),
             process.sp() as usize - process.memory.as_ptr() as usize,
-            &mut stored_state,
+            &mut process.stored_state.borrow_mut(),
         ) {
             Ok(new_stack_pointer) => {
                 process
                     .current_stack_pointer
                     .set(new_stack_pointer as *mut u8);
                 process.debug_set_max_stack_depth();
-                process.stored_state.set(stored_state);
             }
             Err(_) => {
                 if config::CONFIG.debug_load_processes {
